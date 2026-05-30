@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SYS_AUDIO_MATRIX</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            /* THEME: cyan/pink (default) */
+            --c1: 0, 243, 255;
+            --c2: 255, 0, 127;
+            --c3: 0, 255, 180;
+        }
+        body.theme-jungle  { --c1: 0,255,120; --c2: 200,255,0; --c3: 0,180,80; }
+        body.theme-alarm   { --c1: 255,60,60; --c2: 255,220,0; --c3: 255,120,0; }
+        body.theme-violet  { --c1: 180,80,255; --c2: 255,80,200; --c3: 80,160,255; }
+
+        body {
+            background-color: #020205;
+            overflow: hidden;
+            font-family: 'Share Tech Mono', 'Courier New', monospace;
+            color: rgb(var(--c1));
+        }
+
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0; left: 0;
+            z-index: 1;
+            transform-origin: center center;
+        }
+
+        /* CRT scanlines */
+        body::before {
+            content: "";
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: repeating-linear-gradient(
+                0deg, transparent, transparent 2px,
+                rgba(0,0,0,0.10) 2px, rgba(0,0,0,0.10) 4px
+            );
+            z-index: 10; pointer-events: none;
+        }
+        /* Vignette */
+        body::after {
+            content: "";
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.82) 100%);
+            z-index: 9; pointer-events: none;
+        }
+
+        /* ── THEME HINT ── */
+        #themeHint {
+            position: absolute;
+            top: 18px; right: 22px;
+            z-index: 20;
+            font-size: 9px;
+            letter-spacing: 2px;
+            color: rgba(var(--c1), 0.35);
+            pointer-events: none;
+            transition: color 0.4s;
+        }
+
+        /* ── KEYBOARD HINT ── */
+        #keyHint {
+            position: absolute;
+            top: 18px; left: 22px;
+            z-index: 20;
+            font-size: 9px;
+            letter-spacing: 1.5px;
+            color: rgba(var(--c1), 0.3);
+            pointer-events: none;
+            line-height: 1.8;
+        }
+
+        /* ── TRACK SCROLL ── */
+        #trackScroll {
+            position: absolute;
+            top: 18px; left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+            font-size: 10px;
+            letter-spacing: 2px;
+            color: rgba(var(--c2), 0.7);
+            text-shadow: 0 0 8px rgba(var(--c2), 0.4);
+            white-space: nowrap;
+            overflow: hidden;
+            width: 300px;
+            text-align: center;
+            pointer-events: none;
+        }
+
+        /* ── UI DOCK ── */
+        #ui-dock {
+            position: absolute;
+            bottom: 20px; left: 50%;
+            transform: translateX(-50%);
+            width: min(800px, 93vw);
+            z-index: 20;
+            background: rgba(2, 4, 10, 0.90);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(var(--c1), 0.3);
+            box-shadow: 0 0 0 1px rgba(var(--c1),0.06), 0 0 30px rgba(var(--c1),0.07),
+                        inset 0 1px 0 rgba(var(--c1),0.1);
+            padding: 13px 22px 15px;
+            border-radius: 4px;
+            display: flex; flex-direction: column; gap: 10px;
+            transition: border-color 0.4s, box-shadow 0.4s;
+        }
+        .dock-top { display: flex; justify-content: space-between; align-items: center; }
+        .system-title {
+            font-size: 10px; letter-spacing: 3px;
+            color: rgb(var(--c2));
+            text-shadow: 0 0 8px rgba(var(--c2),0.5);
+            transition: color 0.4s, text-shadow 0.4s;
+        }
+        #status {
+            font-size: 9px; letter-spacing: 1px;
+            color: rgba(var(--c1), 0.5);
+            max-width: 55%; text-align: right;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .dock-controls { display: flex; align-items: center; gap: 12px; }
+
+        .btn {
+            background: transparent;
+            border: 1px solid rgba(var(--c1), 0.38);
+            color: rgb(var(--c1));
+            padding: 5px 13px;
+            font-size: 10px; letter-spacing: 1.5px;
+            cursor: pointer; border-radius: 2px; font-family: inherit;
+            transition: border-color 0.2s, box-shadow 0.2s, background 0.2s, color 0.4s;
+            white-space: nowrap; flex-shrink: 0;
+        }
+        .btn:hover {
+            border-color: rgb(var(--c1));
+            background: rgba(var(--c1), 0.08);
+            box-shadow: 0 0 10px rgba(var(--c1), 0.22);
+        }
+        .btn:disabled {
+            border-color: rgba(var(--c1),0.1); color: rgba(var(--c1),0.18);
+            cursor: not-allowed; box-shadow: none; background: transparent;
+        }
+        #loadBtn {
+            background: rgba(var(--c2),0.1); border-color: rgba(var(--c2),0.55);
+            color: rgb(var(--c2)); text-shadow: 0 0 6px rgba(var(--c2),0.4);
+        }
+        #loadBtn:hover {
+            background: rgba(var(--c2),0.18); border-color: rgb(var(--c2));
+            box-shadow: 0 0 12px rgba(var(--2),0.28);
+        }
+        input[type="file"] { display: none; }
+
+        .progress-row { display: flex; align-items: center; gap: 10px; }
+        .time-stamp {
+            font-size: 9px; letter-spacing: 1px;
+            color: rgba(var(--c1),0.45); width: 38px; flex-shrink: 0;
+        }
+        .time-stamp:last-child { text-align: right; }
+
+        #trackProgress {
+            flex-grow: 1; -webkit-appearance: none; appearance: none;
+            background: rgba(var(--c1), 0.1);
+            height: 2px; border-radius: 1px; outline: none; cursor: pointer;
+        }
+        #trackProgress::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 10px; height: 10px; background: rgb(var(--c1));
+            border-radius: 50%;
+            box-shadow: 0 0 6px rgb(var(--c1)), 0 0 12px rgba(var(--c1),0.35);
+            cursor: pointer; transition: transform 0.15s;
+        }
+        #trackProgress:hover::-webkit-slider-thumb { transform: scale(1.3); }
+        #trackProgress:disabled { opacity: 0.2; cursor: not-allowed; }
+
+        #peakMeter {
+            display: flex; gap: 2px; align-items: flex-end;
+            height: 16px; flex-shrink: 0;
+        }
+        .meter-bar { width: 3px; border-radius: 1px; transition: height 0.05s; }
+    </style>
+</head>
+<body>
+
+<div id="keyHint">SPACE · play/pause<br>← → · scrub 5s<br>T · cycle theme</div>
+<div id="themeHint">THEME: CYBER</div>
+<div id="trackScroll"></div>
+
+<div id="ui-dock">
+    <div class="dock-top">
+        <div class="system-title">SYS_AUDIO_MATRIX // V3.0</div>
+        <div id="status">STANDBY — NO SOURCE</div>
+    </div>
+    <div class="dock-controls">
+        <label id="loadBtn" class="btn" for="audioFile">LOAD</label>
+        <input type="file" id="audioFile" accept="audio/*">
+        <button id="playPauseBtn" class="btn" disabled>▶ PLAY</button>
+        <div id="peakMeter">
+            <div class="meter-bar" style="height:3px;background:#00f3ff"></div>
+            <div class="meter-bar" style="height:5px;background:#00f3ff"></div>
+            <div class="meter-bar" style="height:3px;background:#00f3ff"></div>
+            <div class="meter-bar" style="height:6px;background:#00f3ff"></div>
+            <div class="meter-bar" style="height:4px;background:#00f3ff"></div>
+        </div>
+    </div>
+    <div class="progress-row">
+        <span id="timeCurrent" class="time-stamp">00:00</span>
+        <input type="range" id="trackProgress" min="0" value="0" max="100" disabled>
+        <span id="timeTotal" class="time-stamp">00:00</span>
+    </div>
+</div>
+
+<canvas id="cascadeCanvas"></canvas>
+
+<script>
+// ── CANVAS SETUP ──────────────────────────────────────────────────────────────
+const canvas = document.getElementById('cascadeCanvas');
+const ctx    = canvas.getContext('2d');
+canvas.width  = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const FONT_SIZE = 11;
+const FONT = `bold ${FONT_SIZE}px 'Share Tech Mono', monospace`;
+ctx.font = FONT;
+
+let columns   = Math.floor(canvas.width  / FONT_SIZE);
+let totalRows = Math.floor(canvas.height / FONT_SIZE);
+
+const alphabet = "01XYZΩKΨ789$#@%+=-<>*/";
+
+// ── THEMES ────────────────────────────────────────────────────────────────────
+const THEMES = [
+    { name:'CYBER',  c1:[0,243,255],   c2:[255,0,127],   c3:[0,255,180],  cls:'' },
+    { name:'JUNGLE', c1:[0,255,120],   c2:[200,255,0],   c3:[0,180,80],   cls:'theme-jungle' },
+    { name:'ALARM',  c1:[255,60,60],   c2:[255,220,0],   c3:[255,120,0],  cls:'theme-alarm' },
+    { name:'VIOLET', c1:[180,80,255],  c2:[255,80,200],  c3:[80,160,255], cls:'theme-violet' },
+];
+let themeIdx = 0;
+function currentTheme() { return THEMES[themeIdx]; }
+function cycleTheme() {
+    themeIdx = (themeIdx + 1) % THEMES.length;
+    const t = currentTheme();
+    document.body.className = t.cls;
+    document.getElementById('themeHint').textContent = 'THEME: ' + t.name;
+}
+function tc1(a=1){ const [r,g,b]=currentTheme().c1; return `rgba(${r},${g},${b},${a})`; }
+function tc2(a=1){ const [r,g,b]=currentTheme().c2; return `rgba(${r},${g},${b},${a})`; }
+
+// ── ASCII LOTUS ───────────────────────────────────────────────────────────────
+const flowerArt = [
+    "                                                 ⡰⣿⡆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⢀⣠⢤⡤⡤⠤⣤⠄                               ",
+    "                                            ⣀⢾⣥⢻⣿⣆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣤⣶⣿⡱⣆⠤⡁⢎⡡⢵⠀⡄                          ",
+    "                                       ⢠⠆⣾⠸⣿⡎⢿⣿⣶⡀⠀⠀⠀⠀⠀⠀⢀⣴⣿⣿⣿⣿⡿⢘⣠⠞⡧⣙⠤⠏                           ",
+    "                                       ⡼⢸⢿⡇⣿⣿⡘⣿⣿⣿⡀⠀⠀⠀⠀⢠⣼⣿⣿⣿⣿⡿⣃⣿⠣⢤⣤⢛⠇                            ",
+    "                                    ⡰⢥⣃⣏⣷⡜⣿⣧⠹⣿⣿⣿⡄⠀⠀⣴⣿⣿⣿⣿⣿⣯⢾⣿⣿⣾⡿⠶⠃                             ",
+    "                                    ⠵⣣⣟⣼⣷⣻⠸⣿⣦⠹⣿⣿⣿⡄⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⣿⡏                              ",
+    "                                       ⢀⠭⣘⠻⣿⣧⣿⣾⣧⠘⣿⡿⣹⣽⣿⡟⢿⣿⣿⣿⣿⣿⣿⣿⡧⣼⠄                              ",
+    "                                ⢀⠠⠤⡤⢤⠶⡤⣆⣤⡀⡄⠀⠀⠀⠈⠐⠃⢈⠻⢿⣿⣿⡇⠘⡍⡷⢘⣿⣌⡄⠀⣼⣿⣿⣿⣿⣿⡗⠺                                ",
+    "                 ⠰⠀⣀⠦⣑⢦⡙⡲⢍⡶⣋⠶⣡⠞⡝⢯⢷⣞⣶⢠⠀⠀⠀⠠⠀⠙⢿⡝⡄⡇⢱⢸⡏⢸⠆⢸⡟⣿⣿⣿⣿⣿⣟⠥                                ",
+    "              ⠆⠀⠌⡄⡙⡘⠎⢷⡩⢏⠶⣩⠳⣡⠛⢬⢣⡍⠺⢞⢇⣾⠿⠆⠀⢎⡀⡄⠙⢡⣎⠞⡘⢿⡐⢀⡟⣲⢻⣿⣿⣿⣿⣏⡅                                ",
+    "              ⠈⠀⢂⠌⡑⢹⣛⢦⠹⢜⡲⡡⠜⡤⢃⠀⠁⠺⢑⢪⣌⢋⣄⠀⠡⠈⠳⣦⠅⠀⠻⡆⠇⣾⡄⢸⠘⢰⣼⣿⣿⣿⡟⠒                                 ",
+    "                    ⠠⠂⠍⢢⠘⢎⠵⢢⠔⣉⡘⠔⠫⠜⢦⠠⡄⢌⠂⠳⣎⠷⣄⡀⠀⠀⠙⣆⠐⣿⡆⣿⠀⡧⠰⣟⣿⣻⣿⡟⠑⠀⢀⡀⣄⣀⡀                  ",
+    "                       ⠈⠒⡄⠉⠎⡔⢃⠎⡔⠌⣙⠒⡆⣆⠀⠈⠃⠙⠀⠙⢼⣉⠷⢦⡐⠢⡘⢆⠙⢿⣿⠐⣱⠿⣀⣡⡶⠇⠀⢀⡐⣤⣻⣽⣯⣿⣶⣥⡄             ",
+    "                          ⠈⠃⡴⢠⢈⡐⠡⠒⠤⡈⢄⡘⢀⠀⠆⡡⠤⣀⣄⠰⠬⠡⢙⡳⢾⣮⣡⢌⠻⠀⡿⠙⡳⢃⠉⠀⠀⠈⣁⢋⠟⡻⠿⣿⣿⣿⣿⣷⣄⡀      ",
+    "                                ⠁⠲⢤⠓⣌⠲⠤⣄⣈⢂⠒⡌⢰⡐⠤⡈⢍⡛⡫⢭⣍⣓⢾⣿⣝⢷⠤⠀⠀⠀⠤⢒⡈⣋⢛⡒⠾⠶⣴⣦⣀⡈⠍⠛⢿⣿⣽⢦⠀⠀⠀   ",
+    "                                   ⠉⠚⠥⡳⡄⣙⢪⣝⠺⣧⢟⣷⡾⣧⣱⣦⠚⢀⣉⣓⣊⡙⣻⣆⠒⠄⡀⠈⢆⢳⡸⢯⣿⣿⣷⣶⣬⣙⣛⠻⢦⣤⣌⠛⣯⠓⠀⠀",
+    "                                      ⠉⣀⠃⠮⢣⡹⢦⣛⠶⠛⠋⠀⢠⣳⡿⠟⠉⡼⢳⢌⡃⠌⠐⠀⠀⠎⠳⡛⠿⠛⡟⠿⠻⠿⢶⣻⠰⢦⡻⣝⢠⠏⠀⠀ ",
+    "                                ⡀⠄⢢⠐⠈⠄⠀⢄⠠⠀⢀⠀⡔⢁⠣⢃⠁⡐⢨⠑⡱⢊⠔⠈⠀⠀⢠⡈⡆⢁⣤⠡⠄⠄⠆⢁⡂⠰⠨⣥⢛⠬⡣⠍⠀⠀  ",
+    "                             ⢠⢂⠔⠈⣠⢮⡑⠊⠁⠈⠀⡠⠂⣸⠁⠨⠑⡂⢌⠀⢄⢣⣿⢨⠀⠰⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠐⠋⠺⠥⠃⠀⠀    ",
+    "                          ⡴⢡⡞⣨⣾⣿⡗⠈⠁⠄⡡⢐⡁⢀⡏⣘⠀⢰⢁⡂⠀⣺⣼⣵⡎⠡⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀     ",
+    "                        ⡸⢡⡗⣰⣿⣿⣿⣼⣷⡏⣄⠣⢠⠂⢸⣷⣿⡀⣿⡘⢇⢲⣿⣿⣿⣏⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀      ",
+    "                        ⡏⡟⣰⣿⣿⣿⣿⣿⡿⣟⡽⡂⠧⠀⣾⣿⣿⡟⣿⡇⣾⣿⣿⣿⣿⣿⠇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀      ",
+    "                        ⡧⢁⣿⡟⣽⣿⣿⣿⡿⣉⡴⠳⠀⠀⣿⣿⣿⣧⢻⣇⢿⢾⣿⣿⣿⣿⠇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀      ",
+    "                        ⠠⢻⡼⣽⣿⣿⣿⡿⠓⠈⠀⠀⠀⠀⢸⡟⢿⣿⣟⣿⣷⡌⢹⣿⣿⢿⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀      ",
+    "                          ⠄⠻⣜⣿⠟⠁⠀⠀⠀⠀⠀⠀⠀⠘⣿⣼⣿⣿⡿⣽⣷⠀⡟⢿⣽⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀      ",
+    "                            ⠈⠘⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠐⢣⡝⣿⣷⣿⣿⣧⠙⣿⣧⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀      ",
+    "                               ⠭⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⢾⣿⣿⣷⣿⣿⡄⣻⠆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀      ",
+    "                                               ⠠⠌⠛⠿⡏⠙⠁⠆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀      "
+];
+
+const artWidthChars  = flowerArt[0].length;
+const artHeightLines = flowerArt.length;
+let artStartCol = Math.floor((columns - artWidthChars) / 2);
+let artStartRow = Math.floor((totalRows - artHeightLines) / 2) - 3;
+
+// ── RAIN STATE ────────────────────────────────────────────────────────────────
+function rndChar() { return alphabet[Math.floor(Math.random() * alphabet.length)]; }
+
+function makeDrop() {
+    const len = 6 + Math.floor(Math.random() * 16);
+    const chars = [];
+    for (let i = 0; i < 22; i++) chars.push(rndChar());
+    return {
+        y:      -(Math.random() * totalRows),
+        speed:   0.35 + Math.random() * 0.85,
+        len,
+        chars,
+        dimmed:  Math.random() < 0.35,
+    };
+}
+
+let drops = Array.from({ length: columns }, makeDrop);
+const splashes = [];
+
+// ── AUDIO ─────────────────────────────────────────────────────────────────────
+let audioNode = null;
+let audioCtx, analyser, sourceNode, dataArray, timeDomainArray;
+let isSourceLoaded = false;
+let audioBoost = 0;          // smoothed bass 0..1
+let rawBoost   = 0;
+let beatDetected = false;
+
+// Beat detection state
+let energyHistory = new Array(43).fill(0);
+let energyPtr     = 0;
+let beatCooldown  = 0;
+
+// Shake state
+let shakeX = 0, shakeY = 0, shakeDecay = 0;
+
+// Lotus breathe (BPM pulse)
+let lotusScale       = 1.0;
+let lotusScaleTarget = 1.0;
+
+// Waveform ribbon
+let waveformData = new Float32Array(256).fill(0);
+
+// Tunnel
+let tunnelPhase = 0;
+let tunnelRings = Array.from({length:8}, (_, i) => ({
+    radius: 40 + i * 55,
+    chars:  Array.from({length: 32+i*4}, rndChar),
+    speed:  0.012 - i*0.001,
+}));
+
+const fileInput     = document.getElementById('audioFile');
+const playPauseBtn  = document.getElementById('playPauseBtn');
+const trackProgress = document.getElementById('trackProgress');
+const timeCurrent   = document.getElementById('timeCurrent');
+const timeTotal     = document.getElementById('timeTotal');
+const statusDiv     = document.getElementById('status');
+const meterBars     = document.querySelectorAll('.meter-bar');
+const trackScroll   = document.getElementById('trackScroll');
+
+// ── LCD TRACK NAME SCROLLER ───────────────────────────────────────────────────
+let scrollText = '';
+let scrollPos  = 0;
+let scrollTimer = null;
+function startScroll(name) {
+    scrollText = '  ◈ ' + name.toUpperCase() + '  ◈  ';
+    scrollPos = 0;
+    clearInterval(scrollTimer);
+    scrollTimer = setInterval(() => {
+        scrollPos = (scrollPos + 1) % scrollText.length;
+        const vis = scrollText.slice(scrollPos) + scrollText.slice(0, scrollPos);
+        trackScroll.textContent = vis.slice(0, 30);
+    }, 90);
+}
+
+// ── IDLE ANIMATION ────────────────────────────────────────────────────────────
+let idleTime = 0; // increments each frame when paused
+let idleWave = 0;
+
+fileInput.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    statusDiv.textContent = 'DECODING...';
+
+    if (audioNode) { audioNode.pause(); }
+
+    audioNode = new Audio();
+    audioNode.src = URL.createObjectURL(file);
+
+    if (!audioCtx) {
+        audioCtx     = new (window.AudioContext || window.webkitAudioContext)();
+        analyser      = audioCtx.createAnalyser();
+        analyser.fftSize = 512;
+        dataArray     = new Uint8Array(analyser.frequencyBinCount);
+        timeDomainArray = new Float32Array(analyser.fftSize);
+    }
+    if (sourceNode) sourceNode.disconnect();
+    sourceNode = audioCtx.createMediaElementSource(audioNode);
+    sourceNode.connect(analyser);
+    analyser.connect(audioCtx.destination);
+
+    audioNode.addEventListener('loadedmetadata', () => {
+        trackProgress.max = Math.floor(audioNode.duration);
+        timeTotal.textContent = formatTime(audioNode.duration);
+        trackProgress.disabled = false;
+        playPauseBtn.disabled  = false;
+        const name = file.name.replace(/\.[^.]+$/, '');
+        statusDiv.textContent = name.length > 32 ? name.slice(0,32)+'…' : name;
+        startScroll(name);
+        isSourceLoaded = true;
+    });
+    audioNode.addEventListener('timeupdate', () => {
+        trackProgress.value = Math.floor(audioNode.currentTime);
+        timeCurrent.textContent = formatTime(audioNode.currentTime);
+    });
+    audioNode.addEventListener('ended', () => { audioNode.currentTime = 0; audioNode.play(); });
+});
+
+playPauseBtn.addEventListener('click', togglePlay);
+trackProgress.addEventListener('input', () => { if (audioNode) audioNode.currentTime = trackProgress.value; });
+
+function togglePlay() {
+    if (!audioNode) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    if (audioNode.paused) { audioNode.play(); playPauseBtn.textContent = '⏸ PAUSE'; }
+    else { audioNode.pause(); playPauseBtn.textContent = '▶ PLAY'; }
+}
+
+function formatTime(s) {
+    const m = Math.floor(s/60), sec = Math.floor(s%60);
+    return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+// ── KEYBOARD SHORTCUTS ────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+    if (e.code === 'Space')       { e.preventDefault(); togglePlay(); }
+    if (e.code === 'ArrowRight' && audioNode) audioNode.currentTime = Math.min(audioNode.duration, audioNode.currentTime + 5);
+    if (e.code === 'ArrowLeft'  && audioNode) audioNode.currentTime = Math.max(0, audioNode.currentTime - 5);
+    if (e.code === 'KeyT')        cycleTheme();
+});
+
+// ── BEAT DETECTION ────────────────────────────────────────────────────────────
+function detectBeat(data) {
+    let energy = 0;
+    for (let i = 1; i <= 6; i++) energy += data[i];
+    energy /= 6 * 255;
+
+    const avg = energyHistory.reduce((a,b) => a+b, 0) / energyHistory.length;
+    energyHistory[energyPtr] = energy;
+    energyPtr = (energyPtr + 1) % energyHistory.length;
+
+    if (beatCooldown > 0) { beatCooldown--; return false; }
+    if (energy > avg * 1.45 && energy > 0.15) {
+        beatCooldown = 14; 
+        return true;
+    }
+    return false;
+}
+
+// ── SPLASH CLASS ──────────────────────────────────────────────────────────────
+class Splash {
+    constructor(col, row, intensity) {
+        this.col  = col; this.row = row;
+        const s   = 0.5 + intensity * 2.5;
+        this.vx   = (Math.random() - 0.5) * s * 1.3;
+        this.vy   = -(Math.random() * 0.7 + 0.2) * s;
+        this.char = rndChar();
+        this.life = 1.0;
+        this.decay= 0.025 + Math.random() * 0.02;
+    }
+    update() { this.col += this.vx; this.vy += 0.045; this.row += this.vy; this.life -= this.decay; }
+    draw(c2r, c2g, c2b) {
+        const x = Math.floor(this.col) * FONT_SIZE;
+        const y = Math.floor(this.row) * FONT_SIZE;
+        ctx.fillStyle = `rgba(${c2r},${c2g},${c2b},${this.life * 0.9})`;
+        ctx.fillText(this.char, x, y);
+    }
+}
+
+// ── COLOUR HELPERS ────────────────────────────────────────────────────────────
+function spectrumColor(t, alpha) {
+    const [r1,g1,b1] = currentTheme().c1;
+    const [r2,g2,b2] = currentTheme().c2;
+    const r = Math.floor(r1 + (r2-r1)*t);
+    const g = Math.floor(g1 + (g2-g1)*t);
+    const b = Math.floor(b1 + (b2-b1)*t);
+    return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// ── PEAK METER ────────────────────────────────────────────────────────────────
+function updateMeter() {
+    const [r,g,b] = currentTheme().c1;
+    if (!isSourceLoaded || !dataArray) { meterBars.forEach(bar => { bar.style.height='2px'; bar.style.background=`rgb(${r},${g},${b})`; }); return; }
+    const bands = [2, 8, 20, 45, 90];
+    meterBars.forEach((bar, i) => {
+        const v = dataArray[bands[i]] / 255;
+        bar.style.height = Math.max(2, Math.floor(v * 16)) + 'px';
+        const t = i / 4;
+        const br = Math.floor(r + (currentTheme().c2[0]-r)*t);
+        const bg = Math.floor(g + (currentTheme().c2[1]-g)*t);
+        const bb = Math.floor(b + (currentTheme().c2[2]-b)*t);
+        bar.style.background = `rgb(${br},${bg},${bb})`;
+    });
+}
+
+// ── MAIN DRAW LOOP ────────────────────────────────────────────────────────────
+let frame = 0;
+
+function draw() {
+    frame++;
+    const t = currentTheme();
+    const [c1r,c1g,c1b] = t.c1;
+    const [c2r,c2g,c2b] = t.c2;
+
+    ctx.font = FONT;
+
+    // ── AUDIO DATA ──
+    if (isSourceLoaded && audioNode && !audioNode.paused) {
+        analyser.getByteFrequencyData(dataArray);
+        analyser.getFloatTimeDomainData(timeDomainArray);
+        rawBoost   = (dataArray[1]+dataArray[2]+dataArray[3]+dataArray[4]) / (4*255);
+        audioBoost += (rawBoost - audioBoost) * 0.25; 
+        beatDetected = detectBeat(dataArray);
+        for (let i = 0; i < waveformData.length; i++) waveformData[i] = timeDomainArray[i];
+        idleTime = 0;
+    } else {
+        audioBoost   *= 0.92;
+        beatDetected  = false;
+        idleTime++;
+        idleWave = (idleWave + 0.015) % (Math.PI * 2);
+    }
+
+    // ── BEAT REACTIONS ──
+    if (beatDetected) {
+        const mag = 4 + audioBoost * 10;
+        shakeX = (Math.random() - 0.5) * mag;
+        shakeY = (Math.random() - 0.5) * mag;
+        shakeDecay = 0.88;
+        lotusScaleTarget = 1.0 + 0.035 + audioBoost * 0.07;
+    }
+
+    shakeX *= shakeDecay; shakeY *= shakeDecay;
+    if (Math.abs(shakeX) < 0.2) shakeX = 0;
+    if (Math.abs(shakeY) < 0.2) shakeY = 0;
+
+    lotusScale += (lotusScaleTarget - lotusScale) * 0.22;
+    lotusScaleTarget += (1.0 - lotusScaleTarget) * 0.18;
+
+    ctx.setTransform(1,0,0,1, shakeX, shakeY);
+
+    ctx.fillStyle = 'rgba(2,2,5,0.17)';
+    ctx.fillRect(-10, -10, canvas.width+20, canvas.height+20);
+
+    updateMeter();
+
+    // ── TUNNEL RINGS ──────────────────────────────────────────────────────────
+    tunnelPhase += 0.008 + audioBoost * 0.025;
+    const cx = canvas.width  / 2;
+    const cy = canvas.height / 2 - 30;
+
+    for (let ri = 0; ri < tunnelRings.length; ri++) {
+        const ring   = tunnelRings[ri];
+        const pulse  = 1 + audioBoost * 0.35;
+        const radius = (ring.radius * pulse) % (Math.max(canvas.width, canvas.height) * 0.72);
+        const count  = ring.chars.length;
+        const alpha  = Math.max(0, 0.12 - ri * 0.012) * (1 + audioBoost * 0.5);
+        if (alpha < 0.005) continue;
+
+        const ringRot = tunnelPhase * ring.speed * (ri % 2 === 0 ? 1 : -1);
+
+        for (let ci = 0; ci < count; ci++) {
+            const angle = (ci / count) * Math.PI * 2 + ringRot;
+            const rx = cx + Math.cos(angle) * radius;
+            const ry = cy + Math.sin(angle) * radius;
+
+            const col = Math.floor(rx / FONT_SIZE);
+            const row = Math.floor(ry / FONT_SIZE);
+            if (col >= artStartCol && col < artStartCol + artWidthChars &&
+                row >= artStartRow  && row < artStartRow  + artHeightLines) {
+                const lc = flowerArt[row - artStartRow]?.charAt(col - artStartCol);
+                if (lc && lc !== ' ') continue;
+            }
+
+            if (Math.random() < 0.003) ring.chars[ci] = rndChar();
+
+            ctx.fillStyle = spectrumColor(ri / tunnelRings.length, alpha);
+            ctx.fillText(ring.chars[ci], rx, ry);
+        }
+    }
+
+    // ── FREQUENCY SPECTRUM ────────────────────────────────────────────────────
+    if (isSourceLoaded && dataArray) {
+        const numBars    = dataArray.length;
+        const maxBarRows = Math.floor(totalRows * 0.42);
+        const centerRow  = Math.floor(totalRows * 0.58);
+        const barStartCol= Math.floor((columns - numBars) / 2);
+
+        for (let b = 0; b < numBars; b++) {
+            const raw  = dataArray[b] / 255;
+            const barH = Math.floor(raw * maxBarRows);
+            if (barH === 0) continue;
+
+            const colX = barStartCol + b;
+            const xPx  = colX * FONT_SIZE;
+
+            for (let r = 0; r < barH; r++) {
+                const rowY = centerRow - r;
+                if (rowY < 0 || rowY >= totalRows) continue;
+
+                if (colX >= artStartCol && colX < artStartCol + artWidthChars &&
+                    rowY  >= artStartRow  && rowY  < artStartRow  + artHeightLines) {
+                    if (flowerArt[rowY - artStartRow].charAt(colX - artStartCol) !== ' ') continue;
+                }
+
+                const intensity = r / barH;
+                const alpha = 0.04 + intensity * 0.17 + raw * 0.11;
+                ctx.fillStyle = spectrumColor(raw * intensity, alpha);
+                ctx.fillText(alphabet[(b*3 + r + frame) % alphabet.length], xPx, rowY * FONT_SIZE);
+            }
+
+            if (raw > 0.22) {
+                const tipRow = centerRow - barH;
+                if (tipRow >= 0) {
+                    const skip = colX >= artStartCol && colX < artStartCol + artWidthChars &&
+                                 tipRow >= artStartRow && tipRow < artStartRow + artHeightLines &&
+                                 flowerArt[tipRow - artStartRow]?.charAt(colX - artStartCol) !== ' ';
+                    if (!skip) {
+                        ctx.fillStyle = spectrumColor(raw, 0.5 + raw * 0.5);
+                        ctx.fillText(alphabet[(b + frame) % alphabet.length], xPx, tipRow * FONT_SIZE);
+                    }
+                }
+            }
+        }
+    }
+
+    // ── WAVEFORM RIBBON ───────────────────────────────────────────────────────
+    {
+        const wCenterY = canvas.height * 0.62;
+        const wWidth   = canvas.width  * 0.72;
+        const wLeft    = (canvas.width - wWidth) / 2;
+        const wAmp     = isSourceLoaded && !audioNode?.paused
+            ? 28 + audioBoost * 55
+            : 4 + Math.sin(idleWave) * 3; 
+
+        const wSamples = waveformData.length;
+
+        ctx.beginPath();
+        ctx.lineWidth = 1.2;
+        for (let i = 0; i < wSamples; i++) {
+            const x = wLeft + (i / wSamples) * wWidth;
+            const sample = isSourceLoaded ? waveformData[i] : Math.sin(idleWave + i * 0.25) * 0.05;
+            const y = wCenterY + sample * wAmp;
+            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+
+        const grad = ctx.createLinearGradient(wLeft, 0, wLeft + wWidth, 0);
+        grad.addColorStop(0,   `rgba(${c1r},${c1g},${c1b},0)`);
+        grad.addColorStop(0.2, `rgba(${c1r},${c1g},${c1b},${0.25 + audioBoost * 0.35})`);
+        grad.addColorStop(0.5, `rgba(${c2r},${c2g},${c2b},${0.35 + audioBoost * 0.45})`);
+        grad.addColorStop(0.8, `rgba(${c1r},${c1g},${c1b},${0.25 + audioBoost * 0.35})`);
+        grad.addColorStop(1,   `rgba(${c1r},${c1g},${c1b},0)`);
+        ctx.strokeStyle = grad;
+        ctx.shadowColor = `rgba(${c1r},${c1g},${c1b},0.4)`;
+        ctx.shadowBlur  = 6;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+    }
+
+    // ── RAIN DROPS ────────────────────────────────────────────────────────────
+    for (let i = 0; i < drops.length; i++) {
+        const d = drops[i];
+        const speedMod = 1 + audioBoost * 2.8;
+
+        if (Math.random() < 0.07) d.chars[Math.floor(Math.random() * d.chars.length)] = rndChar();
+
+        for (let t = d.len; t >= 0; t--) {
+            const row = Math.floor(d.y) - t;
+            if (row < 0 || row >= totalRows) continue;
+
+            const xPx = i * FONT_SIZE;
+            const yPx = row * FONT_SIZE;
+            const ch  = d.chars[t % d.chars.length];
+
+            if (t === 0) {
+                ctx.fillStyle   = d.dimmed ? `rgba(${c1r},255,255,0.85)` : '#ffffff';
+                ctx.shadowColor = `rgb(${c1r},${c1g},${c1b})`;
+                ctx.shadowBlur  = 9;
+                ctx.fillText(ch, xPx, yPx);
+                ctx.shadowBlur = 0;
+            } else {
+                const fade  = 1 - (t / d.len);
+                const alpha = d.dimmed ? fade * 0.22 : Math.pow(fade, 1.5) * 0.72;
+                const g     = Math.floor(c1g * 0.6 + fade * c1g * 0.4);
+                ctx.fillStyle = `rgba(${c1r},${g},${c1b},${alpha})`;
+                ctx.fillText(ch, xPx, yPx);
+            }
+
+            if (t === 0 &&
+                i >= artStartCol && i < artStartCol + artWidthChars &&
+                row >= artStartRow && row < artStartRow + artHeightLines) {
+                const lChar = flowerArt[row - artStartRow].charAt(i - artStartCol);
+                if (lChar !== ' ') {
+                    const num = 2 + Math.floor(audioBoost * 6);
+                    for (let k = 0; k < num; k++) splashes.push(new Splash(i, row, audioBoost));
+                    d.y = -(Math.random() * 30 + d.len);
+                    d.speed = 0.35 + Math.random() * 0.85;
+                    d.len   = 6 + Math.floor(Math.random() * 16);
+                }
+            }
+        }
+
+        const idleDrift = isSourceLoaded && !audioNode?.paused ? 0 : Math.sin(idleWave + i * 0.3) * 0.008;
+        d.y += (d.speed + idleDrift) * speedMod;
+
+        if (d.y * FONT_SIZE > canvas.height + d.len * FONT_SIZE) {
+            d.y      = -(Math.random() * 20 + d.len);
+            d.speed  = 0.35 + Math.random() * 0.85;
+            d.len    = 6 + Math.floor(Math.random() * 16);
+            d.dimmed = Math.random() < 0.35;
+        }
+    }
+
+    // ── SPLASHES ──────────────────────────────────────────────────────────────
+    for (let i = splashes.length - 1; i >= 0; i--) {
+        splashes[i].update();
+        splashes[i].draw(c2r, c2g, c2b);
+        if (splashes[i].life <= 0 || splashes[i].row > totalRows) splashes.splice(i, 1);
+    }
+
+    // ── LOTUS (with scale pulse) ───────────────────────────────────────────────
+    const lotusIsIdle = !isSourceLoaded || audioNode?.paused;
+    const idlePulse   = lotusIsIdle ? 1 + Math.sin(idleWave * 0.7) * 0.012 : 1;
+    const finalScale  = lotusScale * idlePulse;
+
+    const lotusCX = (artStartCol + artWidthChars / 2) * FONT_SIZE;
+    const lotusCY = (artStartRow + artHeightLines / 2) * FONT_SIZE;
+
+    ctx.save();
+    ctx.translate(lotusCX, lotusCY);
+    ctx.scale(finalScale, finalScale);
+    ctx.translate(-lotusCX, -lotusCY);
+
+    for (let r = 0; r < artHeightLines; r++) {
+        const rowY = (artStartRow + r) * FONT_SIZE;
+        for (let c = 0; c < artWidthChars; c++) {
+            const ch = flowerArt[r].charAt(c);
+            if (ch === ' ') continue;
+            const xPx = (artStartCol + c) * FONT_SIZE;
+
+            if (audioBoost > 0.5) {
+                const flare = (audioBoost - 0.5) / 0.5;
+                ctx.fillStyle   = `rgb(${c2r}, ${Math.floor(c2g * (1-flare) + 80*flare)}, ${c2b})`;
+                ctx.shadowColor = `rgba(${c2r},${c2g},${c2b},${flare * 0.65})`;
+                ctx.shadowBlur  = 8 * flare;
+            } else if (lotusIsIdle) {
+                const breath = (Math.sin(idleWave * 0.8) + 1) / 2;
+                const br = Math.floor(c2r * 0.7 + c2r * 0.3 * breath);
+                const bg = Math.floor(c2g * 0.7 + c2g * 0.3 * breath);
+                const bb = Math.floor(c2b * 0.7 + c2b * 0.3 * breath);
+                ctx.fillStyle = `rgb(${br},${bg},${bb})`;
+                ctx.shadowBlur = 0;
+            } else {
+                ctx.fillStyle  = `rgb(${c2r},${c2g},${c2b})`;
+                ctx.shadowBlur = 0;
+            }
+            ctx.fillText(ch, xPx, rowY);
+            ctx.shadowBlur = 0;
+        }
+    }
+    ctx.restore();
+
+    ctx.setTransform(1,0,0,1,0,0);
+}
+
+setInterval(draw, 28);
+
+// ── FIXED & OPTIMIZED WINDOW RESIZE HANDLE ────────────────────────────────────
+window.addEventListener('resize', () => {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+    
+    // Recompute absolute layout matrix units
+    columns   = Math.floor(canvas.width  / FONT_SIZE);
+    totalRows = Math.floor(canvas.height / FONT_SIZE);
+    
+    artStartCol = Math.floor((columns - artWidthChars) / 2);
+    artStartRow = Math.floor((totalRows - artHeightLines) / 2) - 3;
+    
+    // Smoothly scale matrix drop streams to prevent blank voids on edge expansion
+    if (drops.length < columns) {
+        const extra = columns - drops.length;
+        for(let i = 0; i < extra; i++) drops.push(makeDrop());
+    } else if (drops.length > columns) {
+        drops = drops.slice(0, columns);
+    }
+});
+</script>
+</body>
+</html>
