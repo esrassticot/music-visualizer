@@ -22,8 +22,8 @@
 
 ## How to Use
 
-1. Open the application in your browser.
-2. Upload or play an audio file.
+1. download the html file and open it in your browser.
+2. Upload an audio file.
 3. Watch the visualizer react to the music in real time.
 
 
